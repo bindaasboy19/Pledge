@@ -1,10 +1,10 @@
 /**
  * ============================================================================
- * Pledge Service Adapter — Real Spring Boot Integration
+ * Pledge Service Adapter — Production Node.js + Express Integration
  * ============================================================================
  * 
- * Communicates with the real deployed Java Spring Boot backend for:
- * 1. getPledgeCount()  -> GET /api/pledges/count (returns real count or null)
+ * Communicates with the Node.js + Express backend for:
+ * 1. getPledgeCount()  -> GET /api/pledges/count (returns real count from MongoDB)
  * 2. submitPledge()    -> POST /api/pledges (commits pledge & requests certificate dispatch)
  */
 
@@ -12,7 +12,7 @@ import { apiClient } from '../api/client';
 import { PLEDGE_CONFIG } from '../config/pledgeConfig';
 
 /**
- * Fetch real live pledge counter from Spring Boot backend.
+ * Fetch real live pledge counter from Express/MongoDB backend.
  * Endpoint: GET /api/pledges/count
  * 
  * @returns {Promise<number|null>}
@@ -37,7 +37,7 @@ export async function getPledgeCount() {
 
 /**
  * Stage 1 local registration adapter.
- * The Spring Boot backend commits participant data atomically in Stage 3.
+ * The backend commits participant data atomically in Stage 3.
  * 
  * @param {object} initialData { title, name, language }
  * @returns {Promise<{ participantId: string, isDevPreview: boolean }>}
@@ -50,7 +50,7 @@ export async function submitInitialData() {
 }
 
 /**
- * Submit complete pledge commitment to the real Spring Boot backend.
+ * Submit complete pledge commitment to the Express backend.
  * Endpoint: POST /api/pledges
  * 
  * Backend Contract:
@@ -70,7 +70,7 @@ export async function submitInitialData() {
 export async function submitPledge(payload) {
   const wantsCertificate = Boolean(payload.certificateConsent ?? payload.receiveCertificate);
 
-  // Extract 10-digit phone number as required by Spring Boot backend contract
+  // Extract 10-digit phone number as required by backend contract
   const rawPhone = (payload.phone || payload.mobile || '').replace(/\D/g, '');
   const cleanPhone = rawPhone.length > 10 ? rawPhone.slice(-10) : rawPhone;
 

@@ -3,10 +3,10 @@
  * Central REST API Client
  * ============================================================================
  * 
- * Secure wrapper around Fetch API for communicating with the Spring Boot backend.
+ * Secure wrapper around Fetch API for communicating with the Node.js + Express backend.
  * 
  * Security Features:
- * - Sanitized error normalization (no Java stack traces, SQL traces, or internal paths leaked)
+ * - Sanitized error normalization (no internal server traces or system paths leaked)
  * - Zero logging of sensitive personal data, emails, tokens, or raw request payloads
  * - Request timeout via AbortController
  * - Unified header injection (Content-Type, Accept)
@@ -20,12 +20,10 @@ const isLocalhost =
     window.location.hostname === '127.0.0.1' ||
     window.location.hostname === '::1');
 
-// When running on localhost (dev or preview), route through Vite proxy ('') to satisfy
-// Spring Boot backend CORS policy which strictly whitelists https://ncsam-pledge.vercel.app.
-// In deployed production, use configured VITE_API_BASE_URL or fallback to backend domain.
+// When running on localhost (dev or preview), route through Vite proxy ('') by default or use configured VITE_API_BASE_URL
 const RAW_BASE_URL = isLocalhost
   ? (import.meta.env.VITE_DEV_API_BASE_URL ?? '')
-  : (import.meta.env.VITE_API_BASE_URL || 'https://cyber-awareness-backend.onrender.com');
+  : (import.meta.env.VITE_API_BASE_URL || '');
 
 // Strip trailing slashes
 const API_BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');

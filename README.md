@@ -130,3 +130,4 @@ npm test        # Run backend integration tests
 3. **Idempotency & Duplicate Protection**:
    - If a participant submits the form multiple times, the server updates their record without re-sending redundant certificate emails if one was already dispatched.
 # Pledge
+# Pledge

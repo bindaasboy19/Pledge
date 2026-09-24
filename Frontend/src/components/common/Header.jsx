@@ -72,7 +72,7 @@ export function Header({ currentStage, onReset, isDevPreview }) {
           {isDevPreview && (
             <span
               className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-mono font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full"
-              title="Spring Boot backend is offline; operating via isolated development adapter"
+              title="Backend service is offline; operating via isolated development adapter"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               Dev Mode
