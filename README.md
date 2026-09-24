@@ -1,120 +1,132 @@
-# National Cyber Awareness Month (NCSAM) - Cyber Safety Pledge
+# National Cyber Security Awareness Month — Cyber Safety Pledge (MERN)
 
-A production-quality, accessible, and secure frontend experience for the **National Cyber Awareness Month (NCSAM) Cyber Safety Pledge** ("The Cyber Shield Project" by Naksh Foundation).
-
----
-
-## Visual & Brand Palette
-
-Strictly configured in accordance with campaign branding guidelines:
-- **White**: `#FFFFFF`
-- **Black**: `#050505`
-- **Blue**: `#2563EB`
-- **Dark Blue**: `#0B1F4D`
-- **Pink (Accent)**: `#EC4899`
+A production-ready full-stack **MERN (MongoDB, Express, React, Node.js)** application for the **National Cyber Security Awareness Month (NCSAM) Cyber Safety Pledge** campaign, organized by **The Cyber Shield Project (Naksh Foundation)**.
 
 ---
 
-## 5-Stage Complete User Experience
+## Architecture Overview
 
-1. **Introduction / Hero**:
-   - Cinematic campaign presentation with interactive cyber security nodes converging toward central shield geometry.
-   - Distinct values: *Vigilant Practices*, *Privacy Respect*, *Community Safety*.
-   - Primary Call-to-Action: **"TAKE THE PLEDGE"**.
-
-2. **Participant Registration**:
-   - Clean, focused form: Full Name, Email Address, Mobile Number, Profession, City, Organization.
-   - Accessible `<label>` markup, inline validation, and duplicate submission locks.
-
-3. **Immersive Pledge Reading**:
-   - Dedication oath: **"READ. REFLECT. COMMIT."**
-   - Dynamic natural-speed typing animation with blinking cursor and **"Skip animation"** control.
-   - Visual security pathway milestones: *Awareness* $\rightarrow$ *Understanding* $\rightarrow$ *Commitment*.
-   - Full accessibility support for `prefers-reduced-motion`.
-
-4. **Formal Acknowledgement Sequence**:
-   - Vertical commitment sequence (01, 02, 03) utilizing accessible native checkboxes.
-   - **"GENERATE MY CERTIFICATE"** action remains strictly disabled until all 3 commitments are acknowledged.
-
-5. **Ceremonial Certificate Reveal**:
-   - Accessible modal with focus trap, Escape key handling, and background scroll lock.
-   - Authentic digital certificate layout featuring the official **The Cyber Shield Project / Naksh Foundation** logo, recipient name, official Certificate ID, and issue date.
-   - Direct email delivery confirmation: *"Your certificate has been generated successfully. A copy has been sent to your registered email address."*
-   - Version 1 exclusions strictly honored: zero social sharing or download placeholder buttons.
-
----
-
-## Centralized Configuration (`src/config/pledgeConfig.js`)
-
-All temporary pledge copy and acceptance statements are isolated in `src/config/pledgeConfig.js`:
-
-```javascript
-// Centralized copy easily replaced by the project owner or dynamically by Spring Boot
-export const PLEDGE_CONFIG = {
-  defaultPledgeText: "I pledge to use digital technology responsibly...",
-  defaultAcceptanceStatements: [
-    { number: "01", text: "I will practice safe and responsible digital behaviour." },
-    { number: "02", text: "I will protect my personal information and respect the privacy of others." },
-    { number: "03", text: "I will stay alert to cyber threats and help promote cyber awareness." }
-  ],
-  apiEndpoints: {
-    submitParticipant: "/api/pledge/participants",
-    getPledgeContent: "/api/pledge/content",
-    generateCertificate: "/api/pledge/generate-certificate"
-  }
-};
+```text
+                  USER (Browser)
+                        │
+                        ▼
+             ┌─────────────────────┐
+             │   React Frontend    │ (Vite, TailwindCSS, Lucide)
+             │   (Port 5173)       │
+             └──────────┬──────────┘
+                        │ /api/* (Proxied / Direct HTTPS)
+                        ▼
+             ┌─────────────────────┐
+             │ Node + Express API  │ (Helmet, CORS, Rate Limit, Zod)
+             │ (Port 5001)         │
+             └──────────┬──────────┘
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+      ┌─────────────┐       ┌─────────────┐
+      │   MongoDB   │       │   Email &   │
+      │   (Mongoose)│       │ Certificate │
+      └─────────────┘       │  (PDFKit +  │
+                            │ Nodemailer) │
+                            └─────────────┘
 ```
 
 ---
 
-## Spring Boot Backend Integration
+## Directory Structure
 
-The frontend connects directly to the Java Spring Boot REST API via `src/api/client.js` and `src/services/pledgeService.js`.
-
-### Environment Variables
-
-Configure `.env` or `.env.production`:
-
-```env
-# Spring Boot API Host
-VITE_API_BASE_URL=http://localhost:8080
-
-# Development fallback (true during offline local development; false in production)
-VITE_ENABLE_DEV_MOCK_FALLBACK=true
+```text
+NCSAM-Pledge/
+├── Frontend/                 # React client application (Vite)
+│   ├── src/
+│   │   ├── api/              # Unified REST API client (Fetch wrapper)
+│   │   ├── components/       # UI components (Hero, Pledge Reader, Form, Success)
+│   │   ├── config/           # Campaign text, bilingual pledges (EN/HI), config
+│   │   ├── hooks/            # usePledge state machine
+│   │   ├── services/         # Pledge & Share service adapters
+│   │   └── utils/            # Canvas share card generator
+│   ├── .env.example
+│   └── package.json
+│
+├── Backend/                  # Node.js + Express REST API
+│   ├── src/
+│   │   ├── config/           # Database (Mongoose) & Environment config
+│   │   ├── controllers/      # Pledge endpoints logic
+│   │   ├── middleware/       # Rate limiting, error handling, 404
+│   │   ├── models/           # Pledge participant Mongoose schema
+│   │   ├── routes/           # Health & Pledge API routes
+│   │   ├── services/         # Pledge recording, PDFKit certificate, Nodemailer
+│   │   ├── validators/       # Zod request schema validation & normalization
+│   │   ├── app.js            # Express app configuration
+│   │   └── server.js         # HTTP server entry point & graceful shutdown
+│   ├── tests/                # Automated API integration tests (Node test runner)
+│   ├── .env.example
+│   └── package.json
+│
+├── package.json              # Root workspace management script
+└── README.md
 ```
 
 ---
 
-## Getting Started
+## Quick Start (Local Development)
 
-### Prerequisites
-- Node.js (v18+)
-- npm or yarn
-
-### Installation & Run
+### 1. Backend Setup
 
 ```bash
-# 1. Install dependencies
+cd Backend
 npm install
+npm run dev     # Runs on port 5001 with embedded/local MongoDB
+```
 
-# 2. Run local development server
-npm run dev
+*Note: In development, if `MONGODB_URI` is omitted, the backend automatically spins up an in-memory MongoDB instance for zero-configuration local development.*
 
-# 3. Build production bundle
-npm run build
+### 2. Frontend Setup
+
+```bash
+cd Frontend
+npm install
+npm run dev     # Runs on port 5173 with Vite proxy pointing to :5001
+```
+
+### 3. Root Workspace Commands
+
+From the root directory:
+
+```bash
+npm run server  # Start backend in development mode
+npm run client  # Start frontend in development mode
+npm run build   # Build production frontend bundle
+npm test        # Run backend integration tests
 ```
 
 ---
 
-## Security & Privacy Highlights
+## Backend API Specification
 
-- **Zero sensitive data in storage**: Participant names, emails, and phone numbers are kept in React memory only.
-- **Zero personal data in URLs**: No emails or tokens in query parameters.
-- **Safe error messages**: Backend Java stack traces or database errors are never surfaced.
-- **No client secrets**: Client bundles contain zero private keys, API secrets, or SMTP credentials.
-- See [SECURITY.md](file:///Users/sanjeevchaurasia/Work/NCSAM-Pledge/SECURITY.md) for full details and recommended production headers.
-# NCSAM-Pledge
-# NCSAM-Pledge
-# NCSAM-Pledge
-# NCSAM-Pledge
-# NCSAM-Pledge
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check (returns database status) |
+| `GET` | `/api/pledges/count` | Live total count of pledged participants |
+| `POST` | `/api/pledges` | Submits pledge commitment & optional certificate dispatch |
+
+---
+
+## Certificate & Email Rules
+
+1. **Certificate Consent (`receiveCertificate === true`)**:
+   - Backend renders a high-resolution vector PDF certificate of commitment using PDFKit in memory.
+   - Dispatches the certificate as a PDF attachment via Nodemailer to the participant's email.
+   - Sets `certificateSentAt` in MongoDB.
+   - Frontend success screen shows confirmation that the certificate was emailed.
+   - **The certificate is strictly NEVER rendered on-screen or downloaded directly from the browser.**
+
+2. **No Certificate Consent (`receiveCertificate === false`)**:
+   - Saves participant commitment to MongoDB.
+   - **Does NOT generate a certificate.**
+   - **Does NOT send any email.**
+   - Frontend displays success confirmation without certificate email notice.
+
+3. **Idempotency & Duplicate Protection**:
+   - If a participant submits the form multiple times, the server updates their record without re-sending redundant certificate emails if one was already dispatched.
+# Pledge
