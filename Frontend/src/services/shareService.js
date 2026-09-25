@@ -35,7 +35,7 @@ export function buildPledgeUrl() {
     }
   }
 
-  return 'https://ncsam-pledge.vercel.app';
+  return 'https://ncsampledge.vercel.app';
 }
 
 /**
