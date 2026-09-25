@@ -6,7 +6,6 @@ import { generalLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { healthRouter } from './routes/healthRoutes.js';
 import { pledgeRouter } from './routes/pledgeRoutes.js';
-import { certificateRouter } from './routes/certificateRoutes.js';
 
 export const app = express();
 
@@ -24,6 +23,7 @@ const allowedOrigins = [
   'http://localhost:4173',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:4173',
+  'https://ncsampledge.vercel.app',
   'https://ncsam-pledge.vercel.app',
 ].filter(Boolean);
 
@@ -69,7 +69,6 @@ app.use(generalLimiter);
 // -------------------------------------------------------------
 app.use('/api', healthRouter);
 app.use('/api/pledges', pledgeRouter);
-app.use('/api/certificates', certificateRouter);
 
 // -------------------------------------------------------------
 // 404 & Centralized Error Handlers

@@ -30,37 +30,43 @@ export async function getNextPledgeSequence() {
 }
 
 /**
- * Formats standard official certificate ID.
+ * Formats standard official certificate number derived from the pledge sequence.
  * Format: NF/CSP/<8-digit sequence> (e.g., NF/CSP/26000001)
  * 
  * @param {number|string} sequenceNumber
  * @returns {string}
  */
-export function formatCertificateId(sequenceNumber) {
+export function formatCertificateNumber(sequenceNumber) {
   return `NF/CSP/${sequenceNumber}`;
 }
 
+export const formatCertificateId = formatCertificateNumber;
+
 /**
- * Get verified count of pledges where pledgeAccepted === true.
+ * Get verified count of all recorded pledges.
  * @returns {Promise<number>}
  */
 export async function getPledgeCount() {
-  return Pledge.countDocuments({ pledgeAccepted: true });
+  return Pledge.countDocuments();
 }
 
 /**
  * Record a participant's pledge and handle backend certificate generation & email delivery.
  * 
- * Flow:
- * 1. Validate request and acceptance
+ * Minimal Workflow:
+ * 1. Validate request
  * 2. Get next atomic sequence number (26000001...)
- * 3. Generate official certificate ID (NF/CSP/26000001)
- * 4. If receiveCertificate = true:
- *    - Generate reference-matched PDF certificate with QR code
- *    - Send PDF attached via email to participant
- *    - Record timestamps (certificateGeneratedAt, certificateSentAt)
- * 5. If receiveCertificate = false:
- *    - Save pledge record without generating or sending certificate
+ * 3. Derive certificate number (NF/CSP/<sequence>)
+ * 4. If receiveCertificate = false:
+ *    - Save minimal pledge record (certificateStatus: 'not_requested')
+ *    - No PDF generated, no email sent
+ * 5. If receiveCertificate = true:
+ *    - Generate date on backend
+ *    - Load template and dynamically insert Title + Name, Certificate Number, Date
+ *    - Generate in-memory PDF buffer (strictly never stored in MongoDB)
+ *    - Send PDF as attachment via Nodemailer
+ *    - Release PDF buffer immediately
+ *    - Save minimal pledge record (certificateStatus: 'sent' or 'failed')
  * 
  * @param {object} validatedData
  * @returns {Promise<{
@@ -80,60 +86,29 @@ export async function recordPledge(validatedData) {
     phone,
     occupation,
     organisation,
-    language,
-    pledgeAccepted,
     receiveCertificate,
   } = validatedData;
 
-  // Look up existing participant by email for idempotency
-  let pledge = await Pledge.findOne({ email });
+  // Atomically generate unique pledge number
+  const pledgeNumber = await getNextPledgeSequence();
+  const certificateNumber = formatCertificateNumber(pledgeNumber);
 
-  if (!pledge) {
-    // New participant: atomically generate pledge sequence and certificate ID
-    const pledgeNumber = await getNextPledgeSequence();
-    const certificateId = formatCertificateId(pledgeNumber);
-
-    pledge = new Pledge({
-      title,
-      officialName: name,
-      email,
-      phone,
-      occupation: occupation || '',
-      organisation: organisation || '',
-      language,
-      pledgeAccepted,
-      receiveCertificate,
-      pledgeNumber,
-      certificateId,
-      certificateRequestedAt: receiveCertificate ? new Date() : null,
-    });
-  } else {
-    // Existing participant updating details or retrying
-    pledge.title = title;
-    pledge.officialName = name;
-    pledge.phone = phone;
-    if (occupation) pledge.occupation = occupation;
-    if (organisation) pledge.organisation = organisation;
-    pledge.language = language;
-    pledge.pledgeAccepted = pledgeAccepted;
-
-    // Ensure pledge has certificateId and pledgeNumber
-    if (!pledge.pledgeNumber || !pledge.certificateId) {
-      pledge.pledgeNumber = await getNextPledgeSequence();
-      pledge.certificateId = formatCertificateId(pledge.pledgeNumber);
-    }
-
-    if (receiveCertificate && !pledge.certificateRequestedAt) {
-      pledge.certificateRequestedAt = new Date();
-    }
-    pledge.receiveCertificate = receiveCertificate;
-  }
+  const pledge = new Pledge({
+    title,
+    officialName: name,
+    email,
+    phone,
+    occupation: occupation || '',
+    organisation: organisation || '',
+    receiveCertificate: Boolean(receiveCertificate),
+    pledgeNumber,
+    certificateStatus: receiveCertificate ? 'pending' : 'not_requested',
+  });
 
   // -------------------------------------------------------------
   // Case A: Participant opted OUT of receiving certificate
   // -------------------------------------------------------------
   if (!receiveCertificate) {
-    pledge.certificateStatus = 'not_requested';
     await pledge.save();
     return {
       pledge,
@@ -145,27 +120,12 @@ export async function recordPledge(validatedData) {
   }
 
   // -------------------------------------------------------------
-  // Case B: Participant wants certificate & already received it
+  // Case B: Participant requested certificate
   // -------------------------------------------------------------
-  if (pledge.certificateSentAt && pledge.certificateStatus === 'sent') {
-    await pledge.save();
-    return {
-      pledge,
-      pledgeCompleted: true,
-      certificateGenerated: true,
-      certificateSent: true,
-      message: 'Pledge recorded. Your certificate was previously emailed to your registered email address.',
-    };
-  }
-
-  // -------------------------------------------------------------
-  // Case C: Participant wants certificate & needs it generated & sent
-  // -------------------------------------------------------------
-  const generationDate = pledge.createdAt || new Date();
+  const generationDate = new Date();
   let certificateGenerated = false;
   let certificateSent = false;
   let emailError = null;
-  pledge.certificateStatus = 'pending';
 
   let pdfBuffer = null;
   try {
@@ -173,31 +133,27 @@ export async function recordPledge(validatedData) {
     pdfBuffer = await generateCertificateBuffer({
       title: pledge.title,
       name: pledge.officialName,
-      certificateId: pledge.certificateId,
+      certificateNumber,
       date: generationDate,
     });
-
-    pledge.certificateGeneratedAt = new Date();
-    pledge.certificateStatus = 'generated';
     certificateGenerated = true;
 
+    // Send PDF attached via email
     await emailService.sendCertificateEmail({
       email: pledge.email,
       title: pledge.title,
       name: pledge.officialName,
-      certificateId: pledge.certificateId,
+      certificateId: certificateNumber,
+      certificateReference: certificateNumber,
       date: generationDate,
       pdfBuffer,
     });
 
-    pledge.certificateSentAt = new Date();
     pledge.certificateStatus = 'sent';
-    pledge.certificateError = null;
     certificateSent = true;
   } catch (err) {
     console.error(`[PledgeService] Certificate/Email workflow error for ${email}:`, err.message);
-    pledge.certificateError = err.message;
-    pledge.certificateStatus = 'email_failed';
+    pledge.certificateStatus = 'failed';
     emailError = err.message;
   } finally {
     // Explicitly release temporary buffer reference for immediate garbage collection
@@ -228,6 +184,7 @@ export async function recordPledge(validatedData) {
 
 export default {
   getNextPledgeSequence,
+  formatCertificateNumber,
   formatCertificateId,
   getPledgeCount,
   recordPledge,

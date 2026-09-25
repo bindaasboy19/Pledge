@@ -50,6 +50,23 @@ async function seedCounterIfMissing() {
 }
 
 /**
+ * Drops legacy certificateId_1 index if present to optimize storage and eliminate dead indexes.
+ */
+async function cleanupLegacyIndexes() {
+  try {
+    const collection = mongoose.connection.collection('pledges');
+    const indexes = await collection.indexes();
+    const hasCertIndex = indexes.some((idx) => idx.name === 'certificateId_1');
+    if (hasCertIndex) {
+      await collection.dropIndex('certificateId_1');
+      console.log('[Database] Dropped legacy certificateId_1 index.');
+    }
+  } catch (_) {
+    // Ignore if collection not present yet
+  }
+}
+
+/**
  * Connect to MongoDB with graceful local fallback in development/test.
  */
 export async function connectDB(uriOverride = null) {
@@ -90,6 +107,7 @@ export async function connectDB(uriOverride = null) {
     });
     console.log('[Database] MongoDB connected successfully.');
     await seedCounterIfMissing();
+    await cleanupLegacyIndexes();
     return mongoose.connection;
   } catch (error) {
     console.error('[Database] Connection failure:', error.message);

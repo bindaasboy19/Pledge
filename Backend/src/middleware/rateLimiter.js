@@ -34,30 +34,11 @@ export const pledgeSubmissionLimiter = rateLimit({
   },
 });
 
-/**
- * Dedicated rate limiter for certificate verification lookups.
- * Allows legitimate verification while preventing brute-force enumeration.
- */
-export const verifyLimiter = rateLimit({
-  windowMs: ENV.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000,
-  max: ENV.RATE_LIMIT_VERIFY_MAX || 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => ENV.NODE_ENV === 'test',
-  message: {
-    success: false,
-    verified: false,
-    message: 'Too many certificate verification requests. Please try again in a few minutes.',
-    errorCode: 'RATE_LIMIT_EXCEEDED',
-  },
-});
-
 // Backward compatibility alias
 export const generalLimiter = publicLimiter;
 
 export default {
   publicLimiter,
   pledgeSubmissionLimiter,
-  verifyLimiter,
   generalLimiter,
 };

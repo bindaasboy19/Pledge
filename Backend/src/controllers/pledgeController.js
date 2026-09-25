@@ -26,22 +26,23 @@ export async function submitPledge(req, res, next) {
     const validatedData = validatePledgeInput(req.body);
     const result = await recordPledge(validatedData);
 
-    const isNewRecord = Boolean(!result.pledge.updatedAt || result.pledge.createdAt === result.pledge.updatedAt);
-    const statusCode = isNewRecord ? 201 : 200;
-
-    return res.status(statusCode).json({
+    return res.status(201).json({
       success: true,
       message: result.message,
       pledgeRecorded: true,
       pledgeCompleted: result.pledgeCompleted,
       certificateGenerated: result.certificateGenerated,
       certificateSent: result.certificateSent,
+      emailError: result.emailError,
+      pledgeNumber: result.pledge.pledgeNumber,
+      certificateNumber: result.pledge.certificateNumber,
       certificate: {
         requested: validatedData.receiveCertificate,
         generated: result.certificateGenerated,
         sent: result.certificateSent,
-        certificateId: result.pledge.certificateId,
-        reference: result.pledge.certificateId,
+        certificateNumber: result.pledge.certificateNumber,
+        certificateId: result.pledge.certificateNumber,
+        reference: result.pledge.certificateNumber,
       },
     });
   } catch (error) {

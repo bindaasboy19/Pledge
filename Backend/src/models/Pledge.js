@@ -21,7 +21,6 @@ const pledgeSchema = new mongoose.Schema(
       required: true,
       trim: true,
       lowercase: true,
-      index: true,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email address'],
     },
     phone: {
@@ -43,18 +42,6 @@ const pledgeSchema = new mongoose.Schema(
       maxlength: 120,
       default: '',
     },
-    language: {
-      type: String,
-      required: true,
-      enum: ['en', 'hi'],
-      default: 'en',
-    },
-    pledgeAccepted: {
-      type: Boolean,
-      required: true,
-      default: true,
-      index: true,
-    },
     receiveCertificate: {
       type: Boolean,
       required: true,
@@ -62,61 +49,50 @@ const pledgeSchema = new mongoose.Schema(
     },
     pledgeNumber: {
       type: Number,
+      required: true,
       index: true,
-    },
-    certificateId: {
-      type: String,
-      unique: true,
-      sparse: true,
-      trim: true,
-      index: true,
-    },
-    certificateRequestedAt: {
-      type: Date,
-      default: null,
-    },
-    certificateGeneratedAt: {
-      type: Date,
-      default: null,
-    },
-    certificateSentAt: {
-      type: Date,
-      default: null,
-    },
-    certificateError: {
-      type: String,
-      default: null,
     },
     certificateStatus: {
       type: String,
-      enum: ['not_requested', 'pending', 'generated', 'sent', 'email_failed'],
+      enum: ['not_requested', 'pending', 'sent', 'failed'],
       default: 'not_requested',
-      index: true,
     },
-    pledgeVersion: {
-      type: String,
-      default: '2026-v1',
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
   {
-    timestamps: true,
+    versionKey: false,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// Virtual aliases for frontend and legacy field compatibility
+// Virtual derived certificate number (NF/CSP/<pledgeNumber>)
+pledgeSchema.virtual('certificateNumber').get(function () {
+  return this.pledgeNumber ? `NF/CSP/${this.pledgeNumber}` : null;
+});
+
+// Backward-compatible virtual aliases
+pledgeSchema.virtual('certificateId').get(function () {
+  return this.pledgeNumber ? `NF/CSP/${this.pledgeNumber}` : null;
+});
+
+pledgeSchema.virtual('certificateReference').get(function () {
+  return this.pledgeNumber ? `NF/CSP/${this.pledgeNumber}` : null;
+});
+
 pledgeSchema.virtual('name').get(function () {
   return this.officialName;
 });
+
 pledgeSchema.virtual('profession').get(function () {
   return this.occupation;
 });
+
 pledgeSchema.virtual('organization').get(function () {
   return this.organisation;
-});
-pledgeSchema.virtual('certificateReference').get(function () {
-  return this.certificateId;
 });
 
 export const Pledge = mongoose.model('Pledge', pledgeSchema);

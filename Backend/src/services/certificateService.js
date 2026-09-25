@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import PDFDocument from 'pdfkit';
-import QRCode from 'qrcode';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,7 +50,7 @@ export function formatRecipientDisplayName(title = 'Mr.', name = 'Participant') 
 
 /**
  * Formats generation date cleanly in standard Indian English format.
- * Example: "24 September 2026"
+ * Example: "25 September 2026"
  */
 export function formatCertificateDate(date = new Date()) {
   const d = date instanceof Date ? date : new Date(date);
@@ -67,45 +66,36 @@ export function formatCertificateDate(date = new Date()) {
  * Generate a reference-matched PDF certificate by overlaying dynamic fields
  * onto the fixed Naksh Foundation certificate artwork.
  * 
+ * Only three dynamic elements are overlaid:
+ * 1. Title + Name (Lora Bold)
+ * 2. Certificate Number (Lora Regular)
+ * 3. Date (Lora Regular)
+ * 
+ * The static QR code and all other elements remain part of the fixed template.
+ * 
  * @param {object} params
  * @param {string} [params.title='Mr.'] - Participant title
  * @param {string} [params.name='Participant'] - Participant official name
- * @param {string} [params.certificateId='NF/CSP/26000001'] - Unique certificate ID
+ * @param {string} [params.certificateNumber='NF/CSP/26000001'] - Derived certificate number
  * @param {Date} [params.date=new Date()] - Backend generation date
- * @param {string} [params.verificationUrl] - Custom QR verification link
- * @returns {Promise<Buffer>} Resolves with PDF document buffer
+ * @returns {Promise<Buffer>} Resolves with in-memory PDF document buffer
  */
 export async function generateCertificateBuffer({
   title = 'Mr.',
   name = 'Participant',
-  certificateId = 'NF/CSP/26000001',
+  certificateNumber,
+  certificateId,
   certificateReference,
   date = new Date(),
-  verificationUrl,
 }) {
-  const finalCertId = certificateId || certificateReference || 'NF/CSP/26000001';
+  const finalCertNum = certificateNumber || certificateId || certificateReference || 'NF/CSP/26000001';
   const templatePath = findFirstExistingPath(TEMPLATE_PATHS);
   const loraBoldPath = findFirstExistingPath(LORA_BOLD_PATHS);
   const loraRegularPath = findFirstExistingPath(LORA_REGULAR_PATHS);
 
-  // Generate QR code pointing to public verification endpoint
-  const publicBase = (process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || 'https://naksh.org').trim().replace(/\/+$/, '');
-  const qrPayload = verificationUrl || `${publicBase}/certificate/verify/${finalCertId}`;
-
-  const qrBuffer = await QRCode.toBuffer(qrPayload, {
-    type: 'png',
-    width: 200,
-    margin: 1,
-    color: {
-      dark: '#0B1F4D',
-      light: '#FFFFFF',
-    },
-    errorCorrectionLevel: 'M',
-  });
-
   return new Promise((resolve, reject) => {
     try {
-      // Standard A4 Landscape dimensions in PDF points
+      // Standard A4 Landscape dimensions in PDF points (841.89 x 595.28)
       const PAGE_WIDTH = 841.89;
       const PAGE_HEIGHT = 595.28;
 
@@ -115,7 +105,7 @@ export async function generateCertificateBuffer({
         info: {
           Title: 'Cyber Security Pledge Certificate of Commitment',
           Author: 'Naksh Foundation',
-          Subject: `Certificate for ${name} (${finalCertId})`,
+          Subject: `Certificate for ${name} (${finalCertNum})`,
           Keywords: 'NCSAM, Cyber Security Pledge, Certificate, Naksh Foundation',
         },
       });
@@ -146,14 +136,14 @@ export async function generateCertificateBuffer({
       }
 
       // -----------------------------------------------------------
-      // 2. Dynamic Title + Name Placement
+      // 2. Dynamic Element 1: Title + Name (Lora Bold)
       // -----------------------------------------------------------
       // Positioned directly above the horizontal line (line is at Y ≈ 331.8 pt)
       const recipientName = formatRecipientDisplayName(title, name);
       let nameFontSize = 24;
       doc.font(boldFont).fontSize(nameFontSize);
 
-      // Calculate width and dynamically fit long names into available area
+      // Dynamically fit long names into available width
       const maxAllowedWidth = 440;
       while (doc.widthOfString(recipientName) > maxAllowedWidth && nameFontSize > 15) {
         nameFontSize -= 1;
@@ -173,7 +163,7 @@ export async function generateCertificateBuffer({
         });
 
       // -----------------------------------------------------------
-      // 3. Dynamic Certificate ID & Date (Lower-Left Section)
+      // 3. Dynamic Elements 2 & 3: Certificate Number & Date (Lower-Left)
       // -----------------------------------------------------------
       // Located on opposite side of signature, above www.naksh.org
       const leftColX = 58;
@@ -181,32 +171,21 @@ export async function generateCertificateBuffer({
       const dateY = 527;
       const formattedDate = formatCertificateDate(date);
 
+      // Dynamic Element 2: Certificate Number (Lora Regular)
       doc
         .font(regularFont)
         .fontSize(10)
         .fillColor('#0B1F4D')
-        .text(finalCertId, leftColX, idY, { lineBreak: false });
+        .text(finalCertNum, leftColX, idY, { lineBreak: false });
 
+      // Dynamic Element 3: Date (Lora Regular)
       doc
         .font(regularFont)
         .fontSize(10)
         .fillColor('#0B1F4D')
         .text(formattedDate, leftColX, dateY, { lineBreak: false });
 
-      // -----------------------------------------------------------
-      // 4. Dynamic QR Code (Center-Bottom Section)
-      // -----------------------------------------------------------
-      // Placed directly in the open space between ID/Date block and Signature block
-      const qrSize = 64;
-      const qrX = 388; // Centered between left block and signature block
-      const qrY = 485;
-
-      doc.image(qrBuffer, qrX, qrY, {
-        width: qrSize,
-        height: qrSize,
-      });
-
-      // Finalize PDF stream
+      // Finalize in-memory PDF stream
       doc.end();
     } catch (error) {
       reject(error);
