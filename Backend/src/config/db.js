@@ -3,6 +3,39 @@ import { ENV } from './env.js';
 
 let mongodInstance = null;
 
+/**
+ * Masks credentials in MongoDB URI for safe server logging.
+ * Example: mongodb+srv://user:pass@cluster.mongodb.net/db -> mongodb+srv://***:***@cluster.mongodb.net/db
+ */
+export function sanitizeMongoUriForLog(uri) {
+  if (!uri) return '[not configured]';
+  return uri.replace(/\/\/(.*?):(.*?)@/, '//***:***@');
+}
+
+/**
+ * Normalizes MongoDB URI to ensure database name is specified.
+ * If user provides mongodb+srv://user:pass@cluster.mongodb.net/?appName=...
+ * it injects /ncsam-pledge before the query string.
+ */
+export function normalizeMongoUri(rawUri) {
+  if (!rawUri) return '';
+  let uri = rawUri.trim();
+
+  if (uri.startsWith('mongodb+srv://') || uri.startsWith('mongodb://')) {
+    const match = uri.match(/^(mongodb(?:\+srv)?:\/\/[^\/]+)(\/?[^?]*)(.*)$/);
+    if (match) {
+      const [, prefix, dbPath, query] = match;
+      if (!dbPath || dbPath === '/') {
+        uri = `${prefix}/ncsam-pledge${query ? query : '?retryWrites=true&w=majority'}`;
+      }
+    }
+  }
+  return uri;
+}
+
+/**
+ * Pre-seeds the atomic sequence counter at 26000000 if not already created.
+ */
 async function seedCounterIfMissing() {
   try {
     const { Counter } = await import('../models/Counter.js');
@@ -20,10 +53,13 @@ async function seedCounterIfMissing() {
  * Connect to MongoDB with graceful local fallback in development/test.
  */
 export async function connectDB(uriOverride = null) {
-  let uri = uriOverride || ENV.MONGODB_URI;
+  let rawUri = uriOverride || ENV.MONGODB_URI;
+  let uri = normalizeMongoUri(rawUri);
 
   if (!uri) {
     if (ENV.NODE_ENV === 'production') {
+      console.error('[Database] FATAL: MONGODB_URI environment variable is missing in production environment.');
+      console.error('[Database] Please configure MONGODB_URI in your cloud deployment settings (e.g. Render / Vercel dashboard).');
       throw new Error('MONGODB_URI environment variable is required in production.');
     }
 
@@ -35,7 +71,6 @@ export async function connectDB(uriOverride = null) {
       console.log('[Database] Started in-memory MongoDB instance for development/testing.');
     } catch (err) {
       console.error('[Database] Failed to initialize MongoMemoryServer fallback:', err.message);
-      // Fallback to default local mongo port
       uri = 'mongodb://127.0.0.1:27017/ncsam-pledge';
     }
   }
@@ -49,19 +84,24 @@ export async function connectDB(uriOverride = null) {
   });
 
   try {
+    console.log(`[Database] Connecting to MongoDB (${sanitizeMongoUriForLog(uri)})...`);
     await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 8000,
     });
     console.log('[Database] MongoDB connected successfully.');
     await seedCounterIfMissing();
     return mongoose.connection;
   } catch (error) {
-    console.error('[Database] Initial connection error:', error.message);
+    console.error('[Database] Connection failure:', error.message);
+    console.error('[Database] Diagnostic Checklist:');
+    console.error('  1. Network Access: Ensure your deployment server IP is allowed in MongoDB Atlas > Network Access (or 0.0.0.0/0 for dynamic cloud PaaS like Render).');
+    console.error('  2. Credentials: Verify username and password in MONGODB_URI (ensure special characters in passwords are URL-encoded).');
+    console.error('  3. Cluster Status: Check that your MongoDB Atlas cluster is active.');
 
-    // If local connection failed in development and we haven't tried memory server yet
+    // Only fallback to memory server in local development/test
     if (!mongodInstance && ENV.NODE_ENV !== 'production') {
       try {
-        console.log('[Database] Local MongoDB unreachable. Falling back to MongoDB Memory Server...');
+        console.log('[Database] Falling back to local MongoDB Memory Server for development...');
         const { MongoMemoryServer } = await import('mongodb-memory-server');
         mongodInstance = await MongoMemoryServer.create();
         const memUri = mongodInstance.getUri();
@@ -99,6 +139,8 @@ export function isDbConnected() {
 }
 
 export default {
+  sanitizeMongoUriForLog,
+  normalizeMongoUri,
   connectDB,
   disconnectDB,
   isDbConnected,

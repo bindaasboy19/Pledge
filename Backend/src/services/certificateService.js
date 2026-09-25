@@ -89,8 +89,8 @@ export async function generateCertificateBuffer({
   const loraRegularPath = findFirstExistingPath(LORA_REGULAR_PATHS);
 
   // Generate QR code pointing to public verification endpoint
-  const publicBase = process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || 'https://ncsam-pledge.vercel.app';
-  const qrPayload = verificationUrl || `${publicBase.replace(/\/+$/, '')}/certificate/${encodeURIComponent(finalCertId)}`;
+  const publicBase = (process.env.PUBLIC_BASE_URL || process.env.FRONTEND_URL || 'https://naksh.org').trim().replace(/\/+$/, '');
+  const qrPayload = verificationUrl || `${publicBase}/certificate/verify/${finalCertId}`;
 
   const qrBuffer = await QRCode.toBuffer(qrPayload, {
     type: 'png',

@@ -7,13 +7,14 @@ import { ENV } from '../config/env.js';
 export function notFoundHandler(req, res, next) {
   res.status(404).json({
     success: false,
-    message: `Resource not found: ${req.method} ${req.originalUrl}`,
+    message: 'Resource not found.',
     errorCode: 'NOT_FOUND',
   });
 }
 
 /**
  * Centralized Application Error Handling Middleware
+ * Ensures internal paths, database details, stack traces, and credentials are never exposed to clients.
  */
 export function errorHandler(err, req, res, next) {
   // Syntax error in JSON payload
@@ -28,7 +29,7 @@ export function errorHandler(err, req, res, next) {
   // Zod schema validation errors
   if (err instanceof ZodError) {
     const firstIssue = err.issues[0];
-    const message = firstIssue ? firstIssue.message : 'Invalid request data.';
+    const message = firstIssue ? firstIssue.message : 'Please check the submitted information.';
     const details = err.issues.map((i) => ({
       field: i.path.join('.'),
       message: i.message,
@@ -47,7 +48,7 @@ export function errorHandler(err, req, res, next) {
     const messages = Object.values(err.errors).map((e) => e.message);
     return res.status(400).json({
       success: false,
-      message: messages[0] || 'Database validation failed.',
+      message: 'Please check the submitted information.',
       errorCode: 'VALIDATION_ERROR',
       details: messages,
     });
@@ -62,19 +63,28 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  // Log server internal errors
-  console.error('[ErrorHandler] Unhandled error:', {
+  // CORS policy errors
+  if (err.message && err.message.includes('CORS policy')) {
+    return res.status(403).json({
+      success: false,
+      message: 'Cross-origin request forbidden.',
+      errorCode: 'CORS_FORBIDDEN',
+    });
+  }
+
+  // Log server internal errors safely server-side
+  console.error('[ErrorHandler] Internal error:', {
     message: err.message,
-    stack: ENV.NODE_ENV === 'development' ? err.stack : undefined,
     url: req.originalUrl,
     method: req.method,
+    stack: ENV.NODE_ENV !== 'production' ? err.stack : undefined,
   });
 
   const statusCode = err.status || err.statusCode || 500;
   const safeMessage =
-    statusCode >= 500 && ENV.NODE_ENV === 'production'
-      ? 'An unexpected error occurred. Please try again shortly.'
-      : err.message || 'Internal server error.';
+    statusCode >= 500
+      ? 'Something went wrong. Please try again later.'
+      : err.message || 'Request failed.';
 
   return res.status(statusCode).json({
     success: false,

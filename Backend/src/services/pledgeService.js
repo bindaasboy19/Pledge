@@ -133,6 +133,7 @@ export async function recordPledge(validatedData) {
   // Case A: Participant opted OUT of receiving certificate
   // -------------------------------------------------------------
   if (!receiveCertificate) {
+    pledge.certificateStatus = 'not_requested';
     await pledge.save();
     return {
       pledge,
@@ -146,7 +147,7 @@ export async function recordPledge(validatedData) {
   // -------------------------------------------------------------
   // Case B: Participant wants certificate & already received it
   // -------------------------------------------------------------
-  if (pledge.certificateSentAt) {
+  if (pledge.certificateSentAt && pledge.certificateStatus === 'sent') {
     await pledge.save();
     return {
       pledge,
@@ -164,9 +165,12 @@ export async function recordPledge(validatedData) {
   let certificateGenerated = false;
   let certificateSent = false;
   let emailError = null;
+  pledge.certificateStatus = 'pending';
 
+  let pdfBuffer = null;
   try {
-    const pdfBuffer = await generateCertificateBuffer({
+    // Generate temporary in-memory PDF buffer; strictly not stored in MongoDB
+    pdfBuffer = await generateCertificateBuffer({
       title: pledge.title,
       name: pledge.officialName,
       certificateId: pledge.certificateId,
@@ -174,6 +178,7 @@ export async function recordPledge(validatedData) {
     });
 
     pledge.certificateGeneratedAt = new Date();
+    pledge.certificateStatus = 'generated';
     certificateGenerated = true;
 
     await emailService.sendCertificateEmail({
@@ -186,12 +191,17 @@ export async function recordPledge(validatedData) {
     });
 
     pledge.certificateSentAt = new Date();
+    pledge.certificateStatus = 'sent';
     pledge.certificateError = null;
     certificateSent = true;
   } catch (err) {
     console.error(`[PledgeService] Certificate/Email workflow error for ${email}:`, err.message);
     pledge.certificateError = err.message;
+    pledge.certificateStatus = 'email_failed';
     emailError = err.message;
+  } finally {
+    // Explicitly release temporary buffer reference for immediate garbage collection
+    pdfBuffer = null;
   }
 
   await pledge.save();

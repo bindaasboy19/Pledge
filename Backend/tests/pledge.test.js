@@ -341,4 +341,108 @@ describe('NCSAM Pledge Backend API — Comprehensive Test Suite', () => {
     assert.equal(res.body.success, false);
     assert.equal(res.body.errorCode, 'NOT_FOUND');
   });
+
+  // -----------------------------------------------------------
+  // Test 10 — Certificate Verification: Valid Certificate (Privacy Safe)
+  // -----------------------------------------------------------
+  test('Test 10 — Certificate Verification: Valid certificate returns verified status with NO personal data leakage', async () => {
+    const pledgeRes = await request(server).post('/api/pledges').send({
+      title: 'Mr.',
+      name: 'Deepak Kumar',
+      email: 'deepak.kumar@example.com',
+      phone: '9888877777',
+      occupation: 'Government Officer',
+      organisation: 'Ministry of IT',
+      pledgeAccepted: true,
+      receiveCertificate: true,
+    });
+
+    assert.equal(pledgeRes.status, 201);
+    const certId = pledgeRes.body.certificate.certificateId;
+    assert.ok(certId);
+
+    // Call public verification endpoint with raw slash path
+    const verifyRes = await request(server).get(`/api/certificates/verify/${certId}`);
+
+    assert.equal(verifyRes.status, 200);
+    assert.equal(verifyRes.body.success, true);
+    assert.equal(verifyRes.body.verified, true);
+    assert.equal(verifyRes.body.certificateId, certId);
+    assert.equal(verifyRes.body.issuer, 'Naksh Foundation');
+    assert.equal(verifyRes.body.status, 'Verified');
+    assert.ok(verifyRes.body.issueDate);
+
+    // CRITICAL PRIVACY CHECKS: Zero personal identifying information exposed
+    assert.equal(verifyRes.body.email, undefined, 'Verification must never expose email');
+    assert.equal(verifyRes.body.phone, undefined, 'Verification must never expose phone');
+    assert.equal(verifyRes.body.officialName, undefined, 'Verification must never expose official name');
+    assert.equal(verifyRes.body.name, undefined, 'Verification must never expose recipient name');
+    assert.equal(verifyRes.body.occupation, undefined, 'Verification must never expose occupation');
+    assert.equal(verifyRes.body.organisation, undefined, 'Verification must never expose organisation');
+    assert.equal(verifyRes.body._id, undefined, 'Verification must never expose MongoDB _id');
+    assert.equal(verifyRes.body.pdf, undefined, 'Verification must never expose certificate PDF');
+    assert.equal(verifyRes.body.buffer, undefined, 'Verification must never expose buffer');
+  });
+
+  // -----------------------------------------------------------
+  // Test 11 — Certificate Verification: Nonexistent Certificate
+  // -----------------------------------------------------------
+  test('Test 11 — Certificate Verification: Nonexistent ID returns generic safe rejection without leaking state', async () => {
+    const res = await request(server).get('/api/certificates/verify/NF/CSP/26999999');
+
+    assert.equal(res.status, 404);
+    assert.equal(res.body.success, false);
+    assert.equal(res.body.verified, false);
+    assert.match(res.body.message, /could not be verified/i);
+    assert.equal(res.body.email, undefined);
+    assert.equal(res.body._id, undefined);
+  });
+
+  // -----------------------------------------------------------
+  // Test 12 — Certificate Verification: Injection & Traversal Attacks
+  // -----------------------------------------------------------
+  test('Test 12 — Certificate Verification: Injection attempts return 404 safely', async () => {
+    const maliciousIds = [
+      '../../../etc/passwd',
+      '<script>alert(1)</script>',
+      "NF/CSP/1' OR '1'='1",
+      'NF/CSP/$where',
+    ];
+
+    for (const badId of maliciousIds) {
+      const res = await request(server).get(`/api/certificates/verify/${encodeURIComponent(badId)}`);
+      assert.equal(res.status, 404);
+      assert.equal(res.body.success, false);
+      assert.equal(res.body.verified, false);
+    }
+  });
+
+  // -----------------------------------------------------------
+  // Test 13 — Storage Security: Verify NO PDFs are stored in MongoDB
+  // -----------------------------------------------------------
+  test('Test 13 — Storage Security: MongoDB stores metadata only, zero binary PDF buffers', async () => {
+    const pledgeRes = await request(server).post('/api/pledges').send({
+      title: 'Dr.',
+      name: 'Priya Sharma',
+      email: 'priya.sharma@example.com',
+      phone: '9877766655',
+      pledgeAccepted: true,
+      receiveCertificate: true,
+    });
+
+    assert.equal(pledgeRes.status, 201);
+
+    const saved = await Pledge.findOne({ email: 'priya.sharma@example.com' }).lean();
+    assert.ok(saved);
+    assert.equal(saved.certificateStatus, 'sent');
+    assert.ok(saved.certificateId);
+    assert.ok(saved.pledgeNumber);
+
+    // Verify no PDF, binary, or buffer fields exist on the document
+    assert.equal(saved.pdf, undefined);
+    assert.equal(saved.buffer, undefined);
+    assert.equal(saved.fileData, undefined);
+    assert.equal(saved.base64, undefined);
+    assert.equal(saved.certificateFile, undefined);
+  });
 });

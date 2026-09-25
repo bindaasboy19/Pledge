@@ -87,6 +87,12 @@ const pledgeSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    certificateStatus: {
+      type: String,
+      enum: ['not_requested', 'pending', 'generated', 'sent', 'email_failed'],
+      default: 'not_requested',
+      index: true,
+    },
     pledgeVersion: {
       type: String,
       default: '2026-v1',

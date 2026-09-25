@@ -6,6 +6,7 @@ import { generalLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { healthRouter } from './routes/healthRoutes.js';
 import { pledgeRouter } from './routes/pledgeRoutes.js';
+import { certificateRouter } from './routes/certificateRoutes.js';
 
 export const app = express();
 
@@ -68,6 +69,7 @@ app.use(generalLimiter);
 // -------------------------------------------------------------
 app.use('/api', healthRouter);
 app.use('/api/pledges', pledgeRouter);
+app.use('/api/certificates', certificateRouter);
 
 // -------------------------------------------------------------
 // 404 & Centralized Error Handlers
